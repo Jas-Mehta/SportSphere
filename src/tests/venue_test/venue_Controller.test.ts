@@ -64,7 +64,7 @@ describe("Venue & SubVenue Controller", () => {
     files: []
   });
 
- 
+
   const mockRes = () => {
     const res: Partial<Response> = {};
     res.status = jest.fn().mockReturnValue(res);

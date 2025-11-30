@@ -507,7 +507,10 @@ describe('createDirectBooking - Unit Tests', () => {
                 expect.stringContaining('Booking created:')
             );
             expect(logger.info).toHaveBeenCalledWith(
-                expect.stringContaining('sess_123')
+                expect.stringContaining('user123')
+            );
+            expect(logger.info).toHaveBeenCalledWith(
+                expect.stringContaining('Status: Pending')
             );
         });
     });

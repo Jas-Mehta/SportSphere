@@ -363,7 +363,7 @@ describe('Auth Middleware (protectAdmin)', () => {
     await protectAdmin(mockRequest as Request, mockResponse as Response, nextFunction);
 
     expect(mockRequest.user).toEqual({
-      _id: 'admin',
+      _id: 'admin-env',
       username: 'admin',
       email: 'admin@example.com',
     });

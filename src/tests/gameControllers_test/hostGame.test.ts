@@ -25,16 +25,16 @@ describe('Game Controllers - hostGame.ts', () => {
 
   beforeEach(() => {
     jsonMock = jest.fn();
-    
+
     mockResponse = {
       json: jsonMock,
       status: jest.fn(function(this: any) {
         return this;
       }),
     };
-    
+
     statusMock = mockResponse.status as jest.Mock;
-    
+
     mockRequest = {
       params: {},
       body: {},
@@ -361,11 +361,11 @@ describe('Game Controllers - hostGame.ts', () => {
       const mockPrices: any = {
         football: 1000,
         cricket: 800,
-        get: function(sport: string): number | undefined {
+        get: function (sport: string): number | undefined {
           return this[sport];
         }
       };
-      
+
       const mockSlotWithObject = {
         _id: 'slot123',
         startTime: new Date('2025-12-01T10:00:00Z'),
@@ -646,8 +646,8 @@ describe('Game Controllers - hostGame.ts', () => {
 
     it('should reopen game when status was Full and becomes not full', async () => {
       mockGame.status = 'Full';
-      mockGame.approvedPlayers = ['host123', 'user123', 'user456', 'user789', 'user012', 
-                                   'user234', 'user567', 'user890', 'user111', 'user222'];
+      mockGame.approvedPlayers = ['host123', 'user123', 'user456', 'user789', 'user012',
+        'user234', 'user567', 'user890', 'user111', 'user222'];
       mockGame.playersNeeded = { min: 5, max: 10 };
 
       await leaveGame(

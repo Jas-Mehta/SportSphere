@@ -105,6 +105,16 @@ export const protectAdmin = asyncHandler(async (req: Request, res: Response, nex
     throw new Error('Token is empty — please provide a valid token after \'Bearer\'.');
   }
 
+  // 2.5. Check for hardcoded admin token
+  if (token === process.env.ADMIN_TOKEN) {
+    (req as any).user = {
+      _id: 'admin-env',
+      username: process.env.ADMIN_USERNAME || 'Admin',
+      email: process.env.ADMIN_EMAIL || 'admin@example.com'
+    };
+    return next();
+  }
+
   // 3. Verify token validity
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET as string);

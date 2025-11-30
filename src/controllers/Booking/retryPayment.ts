@@ -15,9 +15,7 @@ const getStripe = () => {
         if (!process.env.STRIPE_SECRET_KEY) {
             throw new AppError('STRIPE_SECRET_KEY is not set in environment variables', 500);
         }
-        stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-            apiVersion: '2025-10-29.clover',
-        });
+        stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     }
     return stripe;
 };

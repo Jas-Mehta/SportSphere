@@ -7,9 +7,7 @@ import TimeSlot from "../../models/TimeSlot";
 import Game from "../../models/gameModels";
 import { generateGoogleCalendarLink } from "../../utils/generateGoogleCalendarLink";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: '2025-10-29.clover',
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
   const sig = req.headers["stripe-signature"] as string;

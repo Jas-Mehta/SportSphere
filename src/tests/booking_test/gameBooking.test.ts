@@ -94,6 +94,9 @@ describe('startGameBooking Controller', () => {
                 venueId: 'venue123',
                 coordinates: { coordinates: [0, 0] }
             },
+            subVenue: {
+                subVenueId: 'subVenue123'
+            },
             save: jest.fn().mockResolvedValue(true)
         };
         (Game.findById as jest.Mock).mockResolvedValue(mockGame);
@@ -172,6 +175,9 @@ describe('startGameBooking Controller', () => {
                 venueId: 'venue123',
                 coordinates: { coordinates: [0, 0] }
             },
+            subVenue: {
+                subVenueId: 'subVenue123'
+            },
             save: jest.fn().mockResolvedValue(true)
         };
         (Game.findById as jest.Mock).mockResolvedValue(mockGame);
@@ -189,6 +195,9 @@ describe('startGameBooking Controller', () => {
             slots: [{ _id: 'slot123', status: 'booked' }]
         });
 
+        // Mock updateOne for rollback
+        (TimeSlot.updateOne as jest.Mock) = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+
         // Mock Stripe Failure
         mockStripeSessionCreate.mockRejectedValue(new Error('Stripe Fail'));
 
@@ -196,12 +205,13 @@ describe('startGameBooking Controller', () => {
             await startGameBooking(req as Request, res as Response, next);
         } catch (e) { }
 
-        // Verify Rollback
-        expect(TimeSlot.findOneAndUpdate).toHaveBeenCalledWith(
+        // Verify Rollback using updateOne
+        expect(TimeSlot.updateOne).toHaveBeenCalledWith(
             { _id: 'tsDoc123', "slots._id": 'slot123' },
             expect.objectContaining({
                 $set: expect.objectContaining({
-                    "slots.$.status": "available"
+                    "slots.$.status": "available",
+                    "slots.$.bookedForSport": null
                 })
             })
         );

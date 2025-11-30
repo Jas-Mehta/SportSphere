@@ -61,8 +61,8 @@ router.post(
 );
 
 router.get(
-  "/:bookingId/calendar", 
-  protect, 
+  "/:bookingId/calendar",
+  protect,
   getCalendarLink
 );
 

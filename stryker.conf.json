@@ -21,7 +21,6 @@
         }
     },
     "mutate": [
-        "src/controllers/authController.ts",
-        "src/controllers/googleAuth.ts"
+        "src/controllers/Booking/gameBooking.ts"
     ]
 }

@@ -11,16 +11,24 @@ jest.mock('../../models/gameModels');
 jest.mock('../../models/TimeSlot');
 jest.mock('../../models/Booking');
 
-const mockStripeSessionCreate = jest.fn();
+// Mock Stripe - create mock inline to avoid hoisting issues
 jest.mock('stripe', () => {
-    return jest.fn().mockImplementation(() => ({
+    const mockCreate = jest.fn();
+    const MockStripe = jest.fn().mockImplementation(() => ({
         checkout: {
             sessions: {
-                create: mockStripeSessionCreate,
+                create: mockCreate,
             },
         },
     }));
+    // Attach the mock to the constructor so we can access it in tests
+    (MockStripe as any).mockSessionCreate = mockCreate;
+    return MockStripe;
 });
+
+import Stripe from 'stripe';
+// Get the mock function from the mocked Stripe constructor
+const mockSessionCreate = (Stripe as any).mockSessionCreate;
 
 describe('startGameBooking - Unit Tests', () => {
     let req: Partial<Request>;
@@ -145,7 +153,7 @@ describe('startGameBooking - Unit Tests', () => {
     });
 
     describe('Validation: TimeSlot Not Found', () => {
-        it('should throw 404 error when TimeSlot document does not exist', async () => {
+        it('should throw 400 error when TimeSlot document does not exist', async () => {
             const mockGame = {
                 _id: 'game123',
                 host: new mongoose.Types.ObjectId('507f1f77bcf86cd799439012'),
@@ -162,19 +170,21 @@ describe('startGameBooking - Unit Tests', () => {
             };
 
             (Game.findById as jest.Mock).mockResolvedValue(mockGame);
-            (TimeSlot.findById as jest.Mock).mockResolvedValue(null);
+            // Atomic lock will fail if TimeSlot doesn't exist
+            (TimeSlot.findOneAndUpdate as jest.Mock).mockResolvedValue(null);
 
             await startGameBooking(req as Request, res as Response, next);
 
             expect(next).toHaveBeenCalledWith(expect.any(AppError));
             const error = (next as jest.Mock).mock.calls[0][0];
-            expect(error.message).toBe('TimeSlot document not found');
-            expect(error.statusCode).toBe(404);
+            // Controller uses atomic locking, so it returns generic error
+            expect(error.message).toBe('Slot is no longer available');
+            expect(error.statusCode).toBe(400);
         });
     });
 
     describe('Validation: Slot Not Found in Document', () => {
-        it('should throw 404 error when slot ID does not exist in TimeSlot', async () => {
+        it('should throw 400 error when slot ID does not exist in TimeSlot', async () => {
             const mockGame = {
                 _id: 'game123',
                 host: new mongoose.Types.ObjectId('507f1f77bcf86cd799439012'),
@@ -191,19 +201,16 @@ describe('startGameBooking - Unit Tests', () => {
             };
 
             (Game.findById as jest.Mock).mockResolvedValue(mockGame);
-            (TimeSlot.findById as jest.Mock).mockResolvedValue({
-                _id: 'tsDoc123',
-                slots: {
-                    id: jest.fn().mockReturnValue(null) // Slot not found
-                }
-            });
+            // Atomic lock will fail if slot doesn't exist
+            (TimeSlot.findOneAndUpdate as jest.Mock).mockResolvedValue(null);
 
             await startGameBooking(req as Request, res as Response, next);
 
             expect(next).toHaveBeenCalledWith(expect.any(AppError));
             const error = (next as jest.Mock).mock.calls[0][0];
-            expect(error.message).toBe('Slot not found');
-            expect(error.statusCode).toBe(404);
+            // Controller uses atomic locking, so it returns generic error
+            expect(error.message).toBe('Slot is no longer available');
+            expect(error.statusCode).toBe(400);
         });
     });
 
@@ -304,12 +311,17 @@ describe('startGameBooking - Unit Tests', () => {
                 slot: {
                     timeSlotDocId: 'tsDoc123',
                     slotId: 'slot123',
-                    price: 500
+                    price: 500,
+                    startTime: new Date(),
+                    endTime: new Date()
                 },
                 sport: 'cricket',
                 venue: {
                     venueId: 'venue123',
                     coordinates: { coordinates: [0, 0] }
+                },
+                subVenue: {
+                    subVenueId: 'subvenue123'
                 }
             };
 
@@ -333,13 +345,15 @@ describe('startGameBooking - Unit Tests', () => {
                 slots: [mockSlot]
             });
 
+            (TimeSlot.updateOne as jest.Mock).mockResolvedValue({ acknowledged: true });
+
             // Stripe fails
-            mockStripeSessionCreate.mockRejectedValue(new Error('Stripe API error'));
+            mockSessionCreate.mockRejectedValue(new Error('Stripe API error'));
 
             await startGameBooking(req as Request, res as Response, next);
 
-            // Verify rollback was called
-            expect(TimeSlot.findOneAndUpdate).toHaveBeenCalledWith(
+            // Verify rollback was called with updateOne
+            expect(TimeSlot.updateOne).toHaveBeenCalledWith(
                 expect.objectContaining({ _id: 'tsDoc123', 'slots._id': 'slot123' }),
                 expect.objectContaining({
                     $set: expect.objectContaining({
@@ -373,6 +387,9 @@ describe('startGameBooking - Unit Tests', () => {
                 venue: {
                     venueId: 'venue123',
                     coordinates: { coordinates: [0, 0] }
+                },
+                subVenue: {
+                    subVenueId: 'subvenue123'
                 }
             };
 
@@ -396,7 +413,9 @@ describe('startGameBooking - Unit Tests', () => {
                 slots: [mockSlot]
             });
 
-            mockStripeSessionCreate.mockResolvedValue({
+            (TimeSlot.updateOne as jest.Mock).mockResolvedValue({ acknowledged: true });
+
+            mockSessionCreate.mockResolvedValue({
                 id: 'sess_123',
                 url: 'http://stripe.com/pay'
             });
@@ -406,8 +425,8 @@ describe('startGameBooking - Unit Tests', () => {
 
             await startGameBooking(req as Request, res as Response, next);
 
-            // Verify rollback was called
-            expect(TimeSlot.findOneAndUpdate).toHaveBeenCalledWith(
+            // Verify rollback was called with updateOne
+            expect(TimeSlot.updateOne).toHaveBeenCalledWith(
                 expect.objectContaining({ _id: 'tsDoc123', 'slots._id': 'slot123' }),
                 expect.objectContaining({
                     $set: expect.objectContaining({
@@ -422,7 +441,7 @@ describe('startGameBooking - Unit Tests', () => {
     });
 
     describe('Success: Game Status Updated to Full', () => {
-        it('should update game status to Full after successful booking', async () => {
+        it('should create booking successfully with Stripe checkout URL', async () => {
             const mockGameSave = jest.fn().mockResolvedValue(true);
             const mockGame = {
                 _id: new mongoose.Types.ObjectId(),
@@ -442,6 +461,9 @@ describe('startGameBooking - Unit Tests', () => {
                 venue: {
                     venueId: 'venue123',
                     coordinates: { coordinates: [0, 0] }
+                },
+                subVenue: {
+                    subVenueId: 'subvenue123'
                 },
                 save: mockGameSave
             };
@@ -466,7 +488,7 @@ describe('startGameBooking - Unit Tests', () => {
                 slots: [mockSlot]
             });
 
-            mockStripeSessionCreate.mockResolvedValue({
+            mockSessionCreate.mockResolvedValue({
                 id: 'sess_123',
                 url: 'http://stripe.com/pay'
             });
@@ -478,8 +500,9 @@ describe('startGameBooking - Unit Tests', () => {
 
             await startGameBooking(req as Request, res as Response, next);
 
-            expect(mockGame.status).toBe('Full');
-            expect(mockGameSave).toHaveBeenCalled();
+            // Game status should NOT be updated in normal mode (only in demo mode)
+            expect(mockGame.status).toBe('Open');
+            expect(mockGameSave).not.toHaveBeenCalled();
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 success: true,
                 url: 'http://stripe.com/pay',
